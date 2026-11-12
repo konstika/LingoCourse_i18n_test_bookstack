@@ -51,15 +51,18 @@ jobs:
             'bypass-tunnel-reminder': 'true'
           };
 
-          // Формируем красивую Markdown-ссылку
-          const linkText = `\n[Issue #${num}](${url}) (статус: ${state})\n`;
+          const issueLink = `- [Issue #${num}](${url}) (статус: ${state})`;
 
-          // Вставляем ссылку строго над разделом ## Метки
-          if (body.includes('## Метки')) {
-            body = body.replace('## Метки', `${linkText}\n## Метки`);
+          if (body.includes('## Ссылки')) {
+            // Если раздел есть, добавляем ссылку первой под ним
+            body = body.replace('## Ссылки', `## Ссылки\n${issueLink}`);
           } else {
-            // Если раздела "Метки" нет, добавляем его и ссылку в конец
-            body += `\n${linkText}\n## Метки\n`;
+            // Если раздела нет, создаем его перед "Метки" (или в конце)
+            if (body.includes('## Метки')) {
+              body = body.replace('## Метки', `## Ссылки\n${issueLink}\n\n## Метки`);
+            } else {
+              body += `\n\n## Ссылки\n${issueLink}\n`;
+            }
           }
 
           // Конвертируем Markdown в HTML
