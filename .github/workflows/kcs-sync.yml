@@ -51,12 +51,15 @@ jobs:
             'bypass-tunnel-reminder': 'true'
           };
 
-          // Вставляем ссылку в раздел "## Ссылки" (если он есть)
-          const linkHtml = `\n\n[Issue #${num}](${url}) — статус: ${state}\n`;
-          if (body.includes('## Ссылки')) {
-            body = body.replace('## Ссылки', `## Ссылки${linkHtml}`);
+          // Формируем красивую Markdown-ссылку
+          const linkText = `\n[Issue #${num}](${url}) (статус: ${state})\n`;
+
+          // Вставляем ссылку строго над разделом ## Метки
+          if (body.includes('## Метки')) {
+            body = body.replace('## Метки', `${linkText}\n## Метки`);
           } else {
-            body += `\n\n## Ссылки${linkHtml}`;
+            // Если раздела "Метки" нет, добавляем его и ссылку в конец
+            body += `\n${linkText}\n## Метки\n`;
           }
 
           // Конвертируем Markdown в HTML
