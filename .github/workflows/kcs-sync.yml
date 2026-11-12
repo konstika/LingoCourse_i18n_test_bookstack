@@ -13,7 +13,7 @@ jobs:
         with:
           node-version: 18
 
-      - name: Sync issue to BookStack
+      - name: Create or Update BookStack Page
         env:
           BOOKSTACK_API_ID: ${{ secrets.BOOKSTACK_API_ID }}
           BOOKSTACK_API_SECRET: ${{ secrets.BOOKSTACK_API_SECRET }}
@@ -39,7 +39,7 @@ jobs:
           const baseUrl = process.env.BOOKSTACK_URL;
           const bookId = process.env.BOOKSTACK_BOOK_ID;
           const title = process.env.ISSUE_TITLE;
-          const body = process.env.ISSUE_BODY || 'Нет описания';
+          let body = process.env.ISSUE_BODY || 'Нет описания';
           const url = process.env.ISSUE_URL;
           const num = process.env.ISSUE_NUMBER;
           const state = process.env.ISSUE_STATE;
@@ -51,8 +51,16 @@ jobs:
             'bypass-tunnel-reminder': 'true'
           };
 
+          // Вставляем ссылку в раздел "## Ссылки" (если он есть)
+          const linkHtml = `\n\n[Issue #${num}](${url}) — статус: ${state}\n`;
+          if (body.includes('## Ссылки')) {
+            body = body.replace('## Ссылки', `## Ссылки${linkHtml}`);
+          } else {
+            body += `\n\n## Ссылки${linkHtml}`;
+          }
+
+          // Конвертируем Markdown в HTML
           const htmlBody = marked.parse(body);
-          const fullHtml = `<p><strong>Issue #${num}</strong> (<em>${state}</em>): <a href='${url}'>${url}</a></p>${htmlBody}`;
 
           async function findPage() {
             const res = await fetch(`${baseUrl}/api/pages?filter[book_id]=${bookId}&count=500`, { headers: auth });
@@ -67,7 +75,7 @@ jobs:
                 const res = await fetch(`${baseUrl}/api/pages/${existing.id}`, {
                   method: 'PUT',
                   headers: auth,
-                  body: JSON.stringify({ name: title, book_id: bookId, html: fullHtml })
+                  body: JSON.stringify({ name: title, book_id: bookId, html: htmlBody })
                 });
                 if (!res.ok) throw new Error(`Update failed: ${res.status} ${await res.text()}`);
                 console.log(`Updated page ${existing.id} (${event})`);
@@ -75,7 +83,7 @@ jobs:
                 const res = await fetch(`${baseUrl}/api/pages`, {
                   method: 'POST',
                   headers: auth,
-                  body: JSON.stringify({ name: title, book_id: bookId, html: fullHtml })
+                  body: JSON.stringify({ name: title, book_id: bookId, html: htmlBody })
                 });
                 if (!res.ok) throw new Error(`Create failed: ${res.status} ${await res.text()}`);
                 console.log(`Created page (${event})`);
