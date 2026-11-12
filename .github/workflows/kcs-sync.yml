@@ -1,0 +1,90 @@
+name: KCS BookStack Sync (i18n)
+
+on:
+  issues:
+    types: [opened, edited, closed]
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Sync issue to BookStack
+        env:
+          BOOKSTACK_API_ID: ${{ secrets.BOOKSTACK_API_ID }}
+          BOOKSTACK_API_SECRET: ${{ secrets.BOOKSTACK_API_SECRET }}
+          BOOKSTACK_URL: ${{ secrets.BOOKSTACK_URL }}
+          BOOKSTACK_BOOK_ID: ${{ secrets.BOOKSTACK_BOOK_ID }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_STATE: ${{ github.event.issue.state }}
+          EVENT_NAME: ${{ github.event.action }}
+        run: |
+          mkdir -p page-generator && cd page-generator
+          npm init -y > /dev/null
+          npm install marked node-fetch@2 > /dev/null
+
+          cat > sync.js <<'EOF'
+          const fetch = require('node-fetch');
+          const marked = require('marked');
+
+          const apiId = process.env.BOOKSTACK_API_ID;
+          const apiSecret = process.env.BOOKSTACK_API_SECRET;
+          const baseUrl = process.env.BOOKSTACK_URL;
+          const bookId = process.env.BOOKSTACK_BOOK_ID;
+          const title = process.env.ISSUE_TITLE;
+          const body = process.env.ISSUE_BODY || 'Нет описания';
+          const url = process.env.ISSUE_URL;
+          const num = process.env.ISSUE_NUMBER;
+          const state = process.env.ISSUE_STATE;
+          const event = process.env.EVENT_NAME;
+
+          const auth = { 
+            'Authorization': `Token ${apiId}:${apiSecret}`, 
+            'Content-Type': 'application/json',
+            'bypass-tunnel-reminder': 'true'
+          };
+
+          const htmlBody = marked.parse(body);
+          const fullHtml = `<p><strong>Issue #${num}</strong> (<em>${state}</em>): <a href='${url}'>${url}</a></p>${htmlBody}`;
+
+          async function findPage() {
+            const res = await fetch(`${baseUrl}/api/pages?filter[book_id]=${bookId}&count=500`, { headers: auth });
+            const data = await res.json();
+            return (data.data || []).find(p => p.name === title);
+          }
+
+          (async () => {
+            try {
+              const existing = await findPage();
+              if (existing) {
+                const res = await fetch(`${baseUrl}/api/pages/${existing.id}`, {
+                  method: 'PUT',
+                  headers: auth,
+                  body: JSON.stringify({ name: title, book_id: bookId, html: fullHtml })
+                });
+                if (!res.ok) throw new Error(`Update failed: ${res.status} ${await res.text()}`);
+                console.log(`Updated page ${existing.id} (${event})`);
+              } else {
+                const res = await fetch(`${baseUrl}/api/pages`, {
+                  method: 'POST',
+                  headers: auth,
+                  body: JSON.stringify({ name: title, book_id: bookId, html: fullHtml })
+                });
+                if (!res.ok) throw new Error(`Create failed: ${res.status} ${await res.text()}`);
+                console.log(`Created page (${event})`);
+              }
+            } catch (e) {
+              console.error(e);
+              process.exit(1);
+            }
+          })();
+          EOF
+
+          node sync.js
